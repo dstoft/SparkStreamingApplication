@@ -20,20 +20,27 @@ import java.util.Arrays;
 
 public class HdfsReadSave {
     public static void main(String[] args) {
-//        SparkConf sparkConf = new SparkConf().setAppName("HdfsStreamingReadSave");
-//
-//        JavaStreamingContext ssc = new JavaStreamingContext(sparkConf, new Duration(2000));
-//        ssc.sparkContext().hadoopConfiguration().set("parquet.read.support.class", "parquet.avro.AvroReadSupport");
+        SparkConf sparkConf = new SparkConf().setAppName("HdfsStreamingReadSave");
+
+        JavaStreamingContext ssc = new JavaStreamingContext(sparkConf, new Duration(2000));
+        ssc.sparkContext().hadoopConfiguration().set("parquet.read.support.class", "parquet.avro.AvroReadSupport");
 
 //        ssc.fileStream<Void, GenericRecord, ParquetInputFormat<GenericRecord>>()
 //        ssc.fileStream("", Void, GenericRecord, ParquetInputFormat<GenericRecord>)
 //        ssc.fileStream("", String.class, GenericRecord.class, ParquetInputFormat.class)
 //        ssc.fileStream<String, GenericRecord, ParquetInputFormat>
 
-//        JavaPairInputDStream<Void, GenericRecord> lines = ssc.fileStream("hdfs://10.123.252.244:9000/user/hadoop/twitter-files-streaming/*.parquet", void.class, GenericRecord.class, ParquetInputFormat.class);
+//        JavaPairInputDStream<Void, GenericRecord> lines =
+//                ssc.fileStream("hdfs://10.123.252.244:9000/user/hadoop/twitter-files-streaming/*.parquet",
+//                        void.class, GenericRecord.class, ParquetInputFormat.class);
 //        JavaDStream<String> words = lines.flatMap((line) ->
-//            Arrays.asList(line._2.get(2).toString().split(" ")).iterator());
+//            Arrays.asList(
+//                    line._2.get(2).toString().split(" ")
+//            ).iterator());
 //        words.dstream().saveAsTextFiles("hdfs://10.123.252.244:9000/user/hadoop/twitter-files-stream-output/", "words.txt");
+
+
+
 //        JavaPairDStream<String, Integer> pairs = words.mapToPair(s -> new Tuple2<>(s, 1));
 //        JavaPairDStream<String, Integer> wordCounts = pairs.reduceByKey(Integer::sum);
 //        wordCounts.print();
@@ -41,6 +48,7 @@ public class HdfsReadSave {
 
 
 
+        // Spark streaming exercise example:
         SparkSession spark = SparkSession.builder().appName("HdfsReadSave").getOrCreate();
         Dataset<Row> dataSchema = spark.read().parquet("hdfs://10.123.252.244:9000/user/hadoop/twitter-files-streaming/*.parquet");
         Dataset<Row> streamingDataFrame = spark.readStream().schema(dataSchema.schema()).option("maxFilesPerTrigger", "1").option("header", "true").parquet("hdfs://10.123.252.244:9000/user/hadoop/twitter-files-streaming/*.parquet");
