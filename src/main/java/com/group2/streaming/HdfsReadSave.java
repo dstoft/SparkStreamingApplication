@@ -25,14 +25,14 @@ public class HdfsReadSave {
     public static void main(String[] args) {
         //Create a DStream from this source - we listen for this repository
         String inputDirectory = "hdfs://10.123.252.244:9000/user/hadoop/stream-input/";
+        String currentMillis = "" + System.currentTimeMillis();
 
         //Create a local Streaming context with two working thread.
-        //SparkConf sparkConf = new SparkConf().setAppName("HdfsStreamingReadSave");
-        SparkConf sparkConf = new SparkConf().setMaster("local[2]").setAppName("HdfsStreamingReadSave");
+        SparkConf sparkConf = new SparkConf().setAppName("HdfsStreamingReadSave");
 
         String lineSeparator = System.getProperty("line.separator");
         //Setup batch interval.
-        JavaStreamingContext ssc = new JavaStreamingContext(sparkConf, new Duration(20000));
+        JavaStreamingContext ssc = new JavaStreamingContext(sparkConf, new Duration(60000));
         ssc.sparkContext().hadoopConfiguration();
 
         JavaDStream<String> directoryStream = ssc.textFileStream(inputDirectory);
@@ -40,16 +40,11 @@ public class HdfsReadSave {
         Function<String, JSONObject> mapToJson = str -> {
             return new JSONObject(str);
         };
+        Function<JSONObject, Boolean> isNotRetweetFilter = k -> (k.isNull("retweeted_status"));
 
-
-        Function<JSONObject, String> mapToMappedTweet = jsonObject -> {
+        Function<JSONObject, MappedTweet> mapToMappedTweet = jsonObject -> {
             long id = jsonObject.getLong("id");
-            boolean isRetweet = jsonObject.getBoolean("retweeted_status");
             boolean isTruncated = jsonObject.getBoolean("truncated");
-
-            String extendedTweetRow = jsonObject.getString("extended_tweet");
-            String user = jsonObject.getString("user");
-
 
             String text = jsonObject.getString("text");
 
@@ -64,7 +59,7 @@ public class HdfsReadSave {
             String timestampMs = jsonObject.getString("timestamp_ms");
 
             long friendsCount = jsonObject.getJSONObject("user").getLong("friends_count");
-            boolean hasMentioned = entities.getBoolean("user_mentions");
+            boolean hasMentioned = !entities.getJSONArray("user_mentions").isEmpty();
 
             text = text.replace(lineSeparator, " ");
 
@@ -72,19 +67,17 @@ public class HdfsReadSave {
 
             int sentimentCounter = wordsLists.positiveWords.size() - wordsLists.negativeWords.size();
 
-            return String.valueOf(new MappedTweet(id, text, timestampMs, wordsLists.words, wordsLists.positiveWords, wordsLists.negativeWords, friendsCount, hasMentioned, sentimentCounter ));
-        };
-
-        Schema mappedTweetSchema = buildSchema();
-
-        VoidFunction<JavaRDD<String>> saveRdd = rdd -> {
-            // saveJavaRDD(rdd, mappedTweetSchema, "hdfs://10.123.252.244:9000/user/hadoop/stream-output/" + System.currentTimeMillis() + "/");
-            rdd.saveAsTextFile("hdfs://10.123.252.244:9000/user/hadoop/stream-output/" + System.currentTimeMillis() + "/");
+            return new MappedTweet(id, text, timestampMs, wordsLists.words, wordsLists.positiveWords, wordsLists.negativeWords, friendsCount, hasMentioned, sentimentCounter);
         };
 
 
+        VoidFunction<JavaRDD<MappedTweet>> saveRdd = rdd -> {
+            Schema mappedTweetSchema = buildSchema();
+            saveJavaRDD(rdd, mappedTweetSchema, "hdfs://10.123.252.244:9000/user/hadoop/stream-out/" + currentMillis + "/" + System.currentTimeMillis() + "/");
+//            rdd.saveAsTextFile("hdfs://10.123.252.244:9000/user/hadoop/stream-out/" + currentMillis + "/" + System.currentTimeMillis() + "/");
+        };
 
-        directoryStream.map(mapToJson).map(mapToMappedTweet)
+        directoryStream.map(mapToJson).filter(isNotRetweetFilter).map(mapToMappedTweet)
                 .foreachRDD(saveRdd);
         ssc.start();
 
